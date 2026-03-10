@@ -1,0 +1,88 @@
+C# Naming Convention Analysis Report
+Generated: 2569-01-31 22:06:52
+Root Directory: C:\Users\ADMIN\Documents\2025_PEA_UN_Migrate\GITLAB\faclp\Esrith.PEA.FACLP.Tools\Test
+------------------------------------------------------------
+
+File: badCode.cs
+  [Class Naming]
+    - layer_manager → Class name must be PascalCase
+       Suggested: LayerManager
+    - exportmap → Class name must be PascalCase
+       Suggested: Exportmap
+    - elevationanalysis → Class name must be PascalCase
+       Suggested: Elevationanalysis
+
+  [Method Naming]
+    - load_map_layers → Method name must be PascalCase
+       Suggested: LoadMapLayers
+    - export_to_shapefile → Method name must be PascalCase
+       Suggested: ExportToShapefile
+
+  [Property Naming]
+    - isbusy → Property name must be PascalCase
+       Suggested: Isbusy
+
+  [Field Naming]
+    - mapPath → Field must be prefixed with '_' and use camelCase
+       Suggested: _mappath
+
+  [Constant Naming]
+    - maxLayerCount → Global constant must be ALL_CAPS
+       Suggested: MAX_LAYER_COUNT
+
+File: badCode2.cs
+  [Class Naming]
+    - layer_manager → Class name must be PascalCase
+       Suggested: LayerManager
+    - exportmap → Class name must be PascalCase
+       Suggested: Exportmap
+    - elevationanalysis → Class name must be PascalCase
+       Suggested: Elevationanalysis
+
+  [Method Naming]
+    - load_map_layers → Method name must be PascalCase
+       Suggested: LoadMapLayers
+    - export_to_shapefile → Method name must be PascalCase
+       Suggested: ExportToShapefile
+
+  [Property Naming]
+    - isbusy → Property name must be PascalCase
+       Suggested: Isbusy
+
+  [Field Naming]
+    - mapPath → Field must be prefixed with '_' and use camelCase
+       Suggested: _mappath
+
+  [Constant Naming]
+    - maxLayerCount → Global constant must be ALL_CAPS
+       Suggested: MAX_LAYER_COUNT
+
+File: badCollection.cs
+  [Class Naming]
+    - layerService → Class name must be PascalCase
+       Suggested: Layerservice
+    - exportmapcommand → Class name must be PascalCase
+       Suggested: Exportmapcommand
+    - elevationanalysisdockpane → Class name must be PascalCase
+       Suggested: Elevationanalysisdockpane
+
+  [Method Naming]
+    - load_layers → Method name must be PascalCase
+       Suggested: LoadLayers
+
+  [Property Naming]
+    - visibleitems → Property name must be PascalCase
+       Suggested: Visibleitems
+
+  [Field Naming]
+    - layer → Field must be prefixed with '_' and use camelCase
+       Suggested: _layer
+    - selected → Field must be prefixed with '_' and use camelCase
+       Suggested: _selected
+    - data → Field must be prefixed with '_' and use camelCase
+       Suggested: _data
+
+  [Constant Naming]
+    - maxLayerCount → Global constant must be ALL_CAPS
+       Suggested: MAX_LAYER_COUNT
+

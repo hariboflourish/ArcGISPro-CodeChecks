@@ -1,0 +1,40 @@
+C# Naming Convention Analysis Report
+Generated: 2569-01-31 17:03:10
+Root Directory: C:\Users\ADMIN\Documents\2025_PEA_UN_Migrate\GITLAB\faclp\Esrith.PEA.FACLP.Tools\Test
+------------------------------------------------------------
+
+File: badCode2.cs
+  - layer_manager → Class name must be PascalCase
+  - exportmap → Class name must be PascalCase
+  - elevationanalysis → Class name must be PascalCase
+  - load_map_layers → Method name must be PascalCase
+  - export_to_shapefile → Method name must be PascalCase
+  - isbusy → Property name must be PascalCase
+  - mapPath → Field must be prefixed with '_' and use camelCase
+  - maxLayerCount → Global constant must be ALL_CAPS
+
+File: badCode.cs
+  - layer_manager → Class name must be PascalCase
+  - exportmap → Class name must be PascalCase
+  - elevationanalysis → Class name must be PascalCase
+  - load_map_layers → Method name must be PascalCase
+  - export_to_shapefile → Method name must be PascalCase
+  - isbusy → Property name must be PascalCase
+  - mapPath → Field must be prefixed with '_' and use camelCase
+  - maxLayerCount → Global constant must be ALL_CAPS
+
+File: badCollection.cs
+  - layerService → Class name must be PascalCase
+  - exportmapcommand → Class name must be PascalCase
+  - elevationanalysisdockpane → Class name must be PascalCase
+  - load_layers → Method name must be PascalCase
+  - visibleitems → Property name must be PascalCase
+  - layer → Field must be prefixed with '_' and use camelCase
+  - layer → Collection name must end with List, Items, Set, or Collection
+  - selected → Field must be prefixed with '_' and use camelCase
+  - selected → Collection name must end with List, Items, Set, or Collection
+  - maxLayerCount → Global constant must be ALL_CAPS
+  - data → Field must be prefixed with '_' and use camelCase
+  - data → Collection name must end with List, Items, Set, or Collection
+
+Total violations: 28

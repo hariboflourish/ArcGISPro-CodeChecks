@@ -1,0 +1,26 @@
+C# Naming Convention Analysis Report
+Generated: 2569-01-31 16:51:57
+Root Directory: C:\Users\ADMIN\Documents\2025_PEA_UN_Migrate\GITLAB\faclp\Esrith.PEA.FACLP.Tools\Test
+------------------------------------------------------------
+
+File: badCode2.cs
+  - layer_manager → Class name must be PascalCase
+  - exportmap → Class name must be PascalCase
+  - elevationanalysis → Class name must be PascalCase
+  - load_map_layers → Method name must be PascalCase
+  - export_to_shapefile → Method name must be PascalCase
+  - isbusy → Property name must be PascalCase
+  - mapPath → Field must be prefixed with '_' and use camelCase
+  - maxLayerCount → Global constant must be ALL_CAPS
+
+File: badCode.cs
+  - layer_manager → Class name must be PascalCase
+  - exportmap → Class name must be PascalCase
+  - elevationanalysis → Class name must be PascalCase
+  - load_map_layers → Method name must be PascalCase
+  - export_to_shapefile → Method name must be PascalCase
+  - isbusy → Property name must be PascalCase
+  - mapPath → Field must be prefixed with '_' and use camelCase
+  - maxLayerCount → Global constant must be ALL_CAPS
+
+Total violations: 16

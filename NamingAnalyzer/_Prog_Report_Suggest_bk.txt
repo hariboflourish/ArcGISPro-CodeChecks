@@ -1,0 +1,243 @@
+﻿using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
+
+var errors =
+    new Dictionary<string, Dictionary<string, List<(string Message, string? Suggestion)>>>();
+
+int errorCount = 0;
+
+var rootDir = Directory.GetCurrentDirectory();
+var reportFileName =
+    $"NamingConvention_Report_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
+var reportFilePath = Path.Combine(rootDir, reportFileName);
+
+var csFiles = Directory.GetFiles(
+    rootDir,
+    "*.cs",
+    SearchOption.AllDirectories)
+    .Where(f =>
+        !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}") &&
+        !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"));
+
+foreach (var file in csFiles)
+{
+    var code = File.ReadAllText(file);
+    var tree = CSharpSyntaxTree.ParseText(code);
+    var root = tree.GetRoot();
+
+    // ===== Classes =====
+    foreach (var cls in root.DescendantNodes().OfType<ClassDeclarationSyntax>())
+    {
+        if (!IsPascalCase(cls.Identifier.Text))
+            Report(file, "Class Naming",
+                cls.Identifier.Text,
+                "Class name must be PascalCase",
+                ToPascalCase(cls.Identifier.Text));
+    }
+
+    // ===== Methods =====
+    foreach (var method in root.DescendantNodes().OfType<MethodDeclarationSyntax>())
+    {
+        if (!IsPascalCase(method.Identifier.Text))
+            Report(file, "Method Naming",
+                method.Identifier.Text,
+                "Method name must be PascalCase",
+                ToPascalCase(method.Identifier.Text));
+    }
+
+    // ===== Properties =====
+    foreach (var prop in root.DescendantNodes().OfType<PropertyDeclarationSyntax>())
+    {
+        if (!IsPascalCase(prop.Identifier.Text))
+            Report(file, "Property Naming",
+                prop.Identifier.Text,
+                "Property name must be PascalCase",
+                ToPascalCase(prop.Identifier.Text));
+    }
+
+    // ===== Fields =====
+    foreach (var field in root.DescendantNodes().OfType<FieldDeclarationSyntax>())
+    {
+        var isConst = field.Modifiers.Any(SyntaxKind.ConstKeyword);
+
+        foreach (var v in field.Declaration.Variables)
+        {
+            var name = v.Identifier.Text;
+            var type = field.Declaration.Type;
+
+            if (isConst)
+            {
+                if (!IsAllCaps(name))
+                    Report(file, "Constant Naming",
+                        name,
+                        "Global constant must be ALL_CAPS",
+                        ToAllCaps(name));
+                continue;
+            }
+
+            if (!name.StartsWith("_") || !IsCamelCase(name.Substring(1)))
+                Report(file, "Field Naming",
+                    name,
+                    "Field must be prefixed with '_' and use camelCase",
+                    "_" + ToCamelCase(name));
+
+            if (IsCollectionType(type) && !HasValidCollectionSuffix(name))
+                Report(file, "Collection Naming",
+                    name,
+                    "Collection name must end with List, Items, Set, or Collection",
+                    SuggestCollectionName(name));
+        }
+    }
+}
+
+// ======================= OUTPUT =======================
+
+var report = new StringBuilder();
+report.AppendLine("C# Naming Convention Analysis Report");
+report.AppendLine($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+report.AppendLine($"Root Directory: {rootDir}");
+report.AppendLine(new string('-', 60));
+report.AppendLine();
+
+if (errors.Any())
+{
+    foreach (var fileEntry in errors.OrderBy(e => e.Key))
+    {
+        var displayFile = Path.GetRelativePath(rootDir, fileEntry.Key);
+
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine($"📄 {displayFile}");
+        Console.ResetColor();
+
+        report.AppendLine($"File: {displayFile}");
+
+        foreach (var typeEntry in fileEntry.Value)
+        {
+            Console.WriteLine($"  [{typeEntry.Key}]");
+            report.AppendLine($"  [{typeEntry.Key}]");
+
+            foreach (var err in typeEntry.Value)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"    ❌ {err.Message}");
+                Console.ResetColor();
+
+                report.AppendLine($"    - {err.Message}");
+
+                if (!string.IsNullOrWhiteSpace(err.Suggestion))
+                {
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine($"       💡 Suggested: {err.Suggestion}");
+                    Console.ResetColor();
+
+                    report.AppendLine($"       Suggested: {err.Suggestion}");
+                }
+            }
+
+            Console.WriteLine();
+            report.AppendLine();
+        }
+    }
+
+    report.AppendLine($"Total violations: {errorCount}");
+    File.WriteAllText(reportFilePath, report.ToString());
+
+    Console.WriteLine($"🚫 Found {errorCount} naming violation(s).");
+    Console.WriteLine($"📄 Report written to: {reportFileName}");
+    Environment.Exit(1);
+}
+else
+{
+    report.AppendLine("No naming violations found.");
+    File.WriteAllText(reportFilePath, report.ToString());
+
+    Console.ForegroundColor = ConsoleColor.Green;
+    Console.WriteLine("✅ Naming check passed.");
+    Console.ResetColor();
+
+    Console.WriteLine($"📄 Report written to: {reportFileName}");
+    Environment.Exit(0);
+}
+
+// ======================= HELPERS =======================
+
+void Report(string file, string category, string name, string message, string? suggestion)
+{
+    errorCount++;
+
+    if (!errors.ContainsKey(file))
+        errors[file] = new Dictionary<string, List<(string, string?)>>();
+
+    if (!errors[file].ContainsKey(category))
+        errors[file][category] = new List<(string, string?)>();
+
+    errors[file][category].Add(($"{name} → {message}", suggestion));
+}
+
+bool IsPascalCase(string s) =>
+    !string.IsNullOrEmpty(s) &&
+    char.IsUpper(s[0]) &&
+    !s.Contains("_");
+
+bool IsCamelCase(string s) =>
+    !string.IsNullOrEmpty(s) &&
+    char.IsLower(s[0]) &&
+    !s.Contains("_");
+
+bool IsAllCaps(string s) =>
+    s.All(c => !char.IsLetter(c) || char.IsUpper(c));
+
+bool HasValidCollectionSuffix(string name) =>
+    name.EndsWith("List") ||
+    name.EndsWith("Items") ||
+    name.EndsWith("Set") ||
+    name.EndsWith("Collection");
+
+bool IsCollectionType(TypeSyntax type)
+{
+    var t = type.ToString();
+
+    return
+        t.EndsWith("[]") ||
+        t.StartsWith("List<") ||
+        t.StartsWith("IList<") ||
+        t.StartsWith("IEnumerable<") ||
+        t.StartsWith("ICollection<") ||
+        t.StartsWith("HashSet<") ||
+        t.StartsWith("ObservableCollection<");
+}
+
+// ===== Name suggestion helpers =====
+
+string ToPascalCase(string input)
+{
+    var words = Regex.Split(input.Trim('_'), @"[_\W]+")
+        .Where(w => !string.IsNullOrEmpty(w))
+        .Select(w => char.ToUpper(w[0]) + w.Substring(1).ToLower());
+
+    return string.Concat(words);
+}
+
+string ToCamelCase(string input)
+{
+    var pascal = ToPascalCase(input);
+    return char.ToLower(pascal[0]) + pascal.Substring(1);
+}
+
+string ToAllCaps(string input) =>
+    Regex.Replace(input, @"([a-z])([A-Z])", "$1_$2").ToUpper();
+
+string SuggestCollectionName(string name)
+{
+    var baseName = name.TrimStart('_');
+    var camel = ToCamelCase(baseName);
+    return "_" + camel + "List";
+}
+

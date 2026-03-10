@@ -1,0 +1,200 @@
+﻿using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
+using System.Linq;
+using System.Text;
+
+// ================================
+// ENTRY POINT
+// ================================
+
+var logToFile = args.Contains("--log");
+var publicOnly = args.Contains("--public");
+var internalOnly = args.Contains("--internal");
+
+var rootDir = Directory.GetCurrentDirectory();
+var logFilePath = logToFile ? Path.Combine(rootDir, "ApiExplorer_Report.log") : null;
+
+var csFiles = Directory.GetFiles(rootDir, "*.cs", SearchOption.AllDirectories)
+    .Where(f =>
+        !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}") &&
+        !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
+    .ToList();
+
+var workspace = new AdhocWorkspace();
+
+var projectInfo = ProjectInfo.Create(
+    ProjectId.CreateNewId(),
+    VersionStamp.Create(),
+    "ApiExplorer",
+    "ApiExplorer",
+    LanguageNames.CSharp,
+    compilationOptions: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+var project = workspace.AddProject(projectInfo);
+
+// 👇 add framework references (VERY important)
+project = project.AddMetadataReference(
+    MetadataReference.CreateFromFile(typeof(object).Assembly.Location));
+
+project = project.AddMetadataReference(
+    MetadataReference.CreateFromFile(typeof(Console).Assembly.Location));
+
+foreach (var file in csFiles)
+{
+    var text = SourceText.From(File.ReadAllText(file));
+    project = project.AddDocument(Path.GetFileName(file), text, filePath: file).Project;
+}
+
+var compilation = await project.GetCompilationAsync();
+if (compilation == null)
+{
+    WriteError("Failed to create compilation");
+    return;
+}
+
+var typesByNamespace = new Dictionary<string, List<INamedTypeSymbol>>();
+
+foreach (var tree in compilation.SyntaxTrees)
+{
+    var model = compilation.GetSemanticModel(tree);
+    var root = await tree.GetRootAsync();
+
+    var typeDecls = root.DescendantNodes()
+        .OfType<TypeDeclarationSyntax>();
+
+    foreach (var decl in typeDecls)
+    {
+        var symbol = model.GetDeclaredSymbol(decl);
+        if (symbol == null) continue;
+
+        // Filter types based on --public and --internal flags
+        if ((publicOnly && symbol.DeclaredAccessibility != Accessibility.Public) &&
+            (internalOnly && symbol.DeclaredAccessibility != Accessibility.Internal))
+        {
+            continue; // Skip if it doesn't match the filter
+        }
+
+        var ns = symbol.ContainingNamespace?.ToDisplayString() ?? "<global>";
+
+        if (!typesByNamespace.TryGetValue(ns, out var list))
+        {
+            list = new List<INamedTypeSymbol>();
+            typesByNamespace[ns] = list;
+        }
+
+        list.Add(symbol);
+    }
+}
+
+// Generate content with ANSI colors
+var outputContent = new StringBuilder();
+outputContent.AppendLine("API Explorer Report");
+outputContent.AppendLine($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+outputContent.AppendLine($"Root Directory: {rootDir}");
+outputContent.AppendLine(new string('-', 60));
+
+foreach (var ns in typesByNamespace.OrderBy(n => n.Key))
+{
+	outputContent.AppendLine($"{ConsoleColorToAnsiCode(ConsoleColor.Magenta)}📂 namespace {ns.Key}{ResetColor()}");
+
+	foreach (var type in ns.Value.OrderBy(t => t.Name))
+	{
+		outputContent.AppendLine($"{ConsoleColorToAnsiCode(ConsoleColor.Cyan)}  📦 {type.TypeKind} {type.Name}{ResetColor()}");
+		PrintFieldsLog(type, outputContent);
+		PrintPropertiesLog(type, outputContent);
+		PrintMethodsLog(type, outputContent);
+	}
+}
+
+// Output to file or console based on the --log flag
+if (logToFile)
+{
+    // Write to log file
+    File.WriteAllText(logFilePath, outputContent.ToString());
+    Console.WriteLine($"Log report generated at {logFilePath}");
+}
+else
+{
+    // Output to console
+    Console.WriteLine(outputContent.ToString());
+}
+
+
+// ================================
+// HELPERS
+// ================================
+
+void WriteError(string message)
+{
+    Console.ForegroundColor = ConsoleColor.Red;
+    Console.WriteLine($"❌ {message}");
+    Console.ResetColor();
+}
+
+void PrintFieldsLog(INamedTypeSymbol type, StringBuilder outputContent)
+{
+    foreach (var field in type.GetMembers().OfType<IFieldSymbol>())
+    {
+        // Filter fields based on --public and --internal flags
+        if ((publicOnly && field.DeclaredAccessibility != Accessibility.Public) &&
+            (internalOnly && field.DeclaredAccessibility != Accessibility.Internal))
+        {
+            continue; // Skip if it doesn't match the filter
+        }
+
+        outputContent.AppendLine($"{ConsoleColorToAnsiCode(ConsoleColor.DarkYellow)}🧱 field {field.Name} {field.Type.ToDisplayString()}{ResetColor()}");
+    }
+}
+
+void PrintPropertiesLog(INamedTypeSymbol type, StringBuilder outputContent)
+{
+    foreach (var prop in type.GetMembers().OfType<IPropertySymbol>())
+    {
+        // Filter properties based on --public and --internal flags
+        if ((publicOnly && prop.DeclaredAccessibility != Accessibility.Public) &&
+            (internalOnly && prop.DeclaredAccessibility != Accessibility.Internal))
+        {
+            continue; // Skip if it doesn't match the filter
+        }
+
+        outputContent.AppendLine($"{ConsoleColorToAnsiCode(ConsoleColor.Blue)}🔑 property {prop.Name} {prop.Type.ToDisplayString()}{ResetColor()}");
+    }
+}
+
+void PrintMethodsLog(INamedTypeSymbol type, StringBuilder outputContent)
+{
+    foreach (var method in type.GetMembers()
+        .OfType<IMethodSymbol>()
+        .Where(m => m.MethodKind == MethodKind.Ordinary))
+    {
+        // Filter methods based on --public and --internal flags
+        if ((publicOnly && method.DeclaredAccessibility != Accessibility.Public) &&
+            (internalOnly && method.DeclaredAccessibility != Accessibility.Internal))
+        {
+            continue; // Skip if it doesn't match the filter
+        }
+
+        outputContent.AppendLine($"{ConsoleColorToAnsiCode(ConsoleColor.Yellow)}⚙️ {method.Name} ({string.Join(", ", method.Parameters.Select(p => $"{p.Type.ToDisplayString()} {p.Name}"))}){ResetColor()}");
+    }
+}
+
+string ConsoleColorToAnsiCode(ConsoleColor color)
+{
+    return color switch
+    {
+        ConsoleColor.Red => "\u001b[31m",
+        ConsoleColor.Green => "\u001b[32m",
+        ConsoleColor.Yellow => "\u001b[33m",
+        ConsoleColor.Blue => "\u001b[34m",
+        ConsoleColor.Cyan => "\u001b[36m",
+        ConsoleColor.Magenta => "\u001b[35m",
+        ConsoleColor.White => "\u001b[37m",
+        ConsoleColor.Black => "\u001b[30m",
+        _ => "\u001b[39m", // Default color
+    };
+}
+
+string ResetColor() => "\u001b[39m"; // Reset to default color
+

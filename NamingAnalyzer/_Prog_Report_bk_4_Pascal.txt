@@ -1,0 +1,366 @@
+﻿using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
+using System.Text;
+using System.Text.RegularExpressions;
+
+bool fixMode = args.Contains("--fix");
+
+var errors =
+    new Dictionary<string, Dictionary<string, List<(string Message, string? Suggestion)>>>();
+
+var rootDir = Directory.GetCurrentDirectory();
+var reportFileName = $"NamingConvention_Report_{DateTime.Now:yyyyMM}.txt";
+var reportFilePath = Path.Combine(rootDir, reportFileName);
+
+var csFiles = Directory.GetFiles(rootDir, "*.cs", SearchOption.AllDirectories)
+    .Where(f =>
+        !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}") &&
+        !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
+    .ToList();
+
+/* ===============================
+   ROSLYN SETUP
+   =============================== */
+
+var workspace = new AdhocWorkspace();
+
+var projectInfo = ProjectInfo.Create(
+    ProjectId.CreateNewId(),
+    VersionStamp.Create(),
+    "NamingAnalyzer",
+    "NamingAnalyzer",
+    LanguageNames.CSharp);
+
+var mainProject = workspace.AddProject(projectInfo);
+
+foreach (var file in csFiles)
+{
+    var text = SourceText.From(File.ReadAllText(file));
+    mainProject = mainProject.AddDocument(
+        Path.GetFileName(file),
+        text,
+        filePath: file).Project;
+}
+
+mainProject = mainProject.Solution.Projects.First();
+
+/* ===============================
+   ANALYSIS
+   =============================== */
+
+foreach (var document in mainProject.Documents)
+{
+    var root = await document.GetSyntaxRootAsync();
+    var model = await document.GetSemanticModelAsync();
+    if (root == null || model == null)
+        continue;
+
+    var filePath = document.FilePath!;
+
+    /* ===== CLASS ===== */
+    foreach (var cls in root.DescendantNodes().OfType<ClassDeclarationSyntax>())
+    {
+        var symbol = model.GetDeclaredSymbol(cls);
+        if (symbol == null) continue;
+
+        if (!IsPascalCase(symbol.Name))
+        {
+            Report(filePath, "Class Naming",
+                symbol.Name, "Class must be PascalCase",
+                ToPascalCase(symbol.Name));
+        }
+
+        // UI Naming Rule
+        var baseName = symbol.BaseType?.Name;
+
+        if (baseName is "Button" or "Tool" or "DockPane")
+        {
+            if (!symbol.Name.EndsWith(baseName))
+            {
+                Report(filePath, "UI Naming",
+                    symbol.Name,
+                    $"Class inheriting {baseName} must end with '{baseName}'",
+                    symbol.Name + baseName);
+            }
+        }
+
+        if (baseName?.Contains("ViewModel") == true)
+        {
+            if (!symbol.Name.EndsWith("ViewModel"))
+            {
+                Report(filePath, "ViewModel Naming",
+                    symbol.Name,
+                    "ViewModel must end with 'ViewModel'",
+                    symbol.Name + "ViewModel");
+            }
+        }
+    }
+
+    /* ===== METHOD ===== */
+    foreach (var method in root.DescendantNodes().OfType<MethodDeclarationSyntax>())
+    {
+        var symbol = model.GetDeclaredSymbol(method);
+        if (symbol == null || symbol.IsOverride) continue;
+
+        if (!IsPascalCase(symbol.Name))
+        {
+            Report(filePath, "Method Naming",
+                symbol.Name,
+                "Method must be PascalCase",
+                ToPascalCase(symbol.Name));
+        }
+
+        bool isAsync = method.Modifiers.Any(m => m.IsKind(SyntaxKind.AsyncKeyword));
+        bool endsWithAsync = symbol.Name.EndsWith("Async");
+
+        if (isAsync && !endsWithAsync)
+        {
+            Report(filePath, "Async Naming",
+                symbol.Name,
+                "Async method must end with 'Async'",
+                symbol.Name + "Async");
+        }
+        else if (!isAsync && endsWithAsync)
+        {
+            Report(filePath, "Async Naming",
+                symbol.Name,
+                "Method ends with 'Async' but is not async",
+                null);
+        }
+    }
+
+    /* ===== PROPERTY ===== */
+    foreach (var prop in root.DescendantNodes().OfType<PropertyDeclarationSyntax>())
+    {
+        var symbol = model.GetDeclaredSymbol(prop);
+        if (symbol == null || symbol.IsOverride) continue;
+
+        if (!IsPascalCase(symbol.Name))
+        {
+            Report(filePath, "Property Naming",
+                symbol.Name,
+                "Property must be PascalCase",
+                ToPascalCase(symbol.Name));
+        }
+    }
+
+    /* ===== FIELD ===== */
+    foreach (var field in root.DescendantNodes().OfType<FieldDeclarationSyntax>())
+    {
+        foreach (var v in field.Declaration.Variables)
+        {
+            var symbol = model.GetDeclaredSymbol(v) as IFieldSymbol;
+            if (symbol == null) continue;
+
+            // GLOBAL CONST → ALL_CAPS
+            if (symbol.IsConst)
+            {
+                if (!IsAllCaps(symbol.Name))
+                {
+                    Report(filePath, "Global Constant Naming",
+                        symbol.Name,
+                        "Global constant must be ALL_CAPS",
+                        ToAllCaps(symbol.Name));
+                }
+                continue;
+            }
+
+            // STATIC READONLY → PascalCase
+            if (symbol.IsStatic && symbol.IsReadOnly)
+            {
+                if (!IsPascalCase(symbol.Name))
+                {
+                    Report(filePath, "Static Readonly Naming",
+                        symbol.Name,
+                        "static readonly field must be PascalCase",
+                        ToPascalCase(symbol.Name));
+                }
+                continue;
+            }
+
+            // PRIVATE FIELD → _camelCase
+            if (!symbol.Name.StartsWith("_") ||
+                !IsCamelCase(symbol.Name.TrimStart('_')))
+            {
+                Report(filePath, "Field Naming",
+                    symbol.Name,
+                    "Field must be _camelCase",
+                    "_" + ToCamelCase(symbol.Name));
+            }
+        }
+    }
+
+    /* ===== LOCAL VARIABLE + LOCAL CONST ===== */
+    foreach (var localDecl in root.DescendantNodes().OfType<LocalDeclarationStatementSyntax>())
+    {
+        foreach (var v in localDecl.Declaration.Variables)
+        {
+            var symbol = model.GetDeclaredSymbol(v);
+            if (symbol == null) continue;
+
+            if (localDecl.IsConst)
+            {
+                if (!IsPascalCase(symbol.Name))
+                {
+                    Report(filePath, "Local Constant Naming",
+                        symbol.Name,
+                        "Local constant must be PascalCase",
+                        ToPascalCase(symbol.Name));
+                }
+            }
+            else
+            {
+                if (!IsCamelCase(symbol.Name))
+                {
+                    Report(filePath, "Local Variable Naming",
+                        symbol.Name,
+                        "Local variable must be camelCase",
+                        ToCamelCase(symbol.Name));
+                }
+            }
+        }
+
+        // COLLECTION RULE
+        var typeInfo = model.GetTypeInfo(localDecl.Declaration.Type);
+        if (typeInfo.Type is INamedTypeSymbol namedType &&
+            namedType.IsGenericType)
+        {
+            var typeName = namedType.Name;
+
+            if (typeName is "List" or "IEnumerable" or "ICollection" or "HashSet")
+            {
+                foreach (var v in localDecl.Declaration.Variables)
+                {
+                    var name = v.Identifier.Text;
+
+                    if (!name.EndsWith("List") &&
+                        !name.EndsWith("Collection") &&
+                        !name.EndsWith("Items") &&
+                        !name.EndsWith("Set"))
+                    {
+                        Report(filePath, "Collection Naming",
+                            name,
+                            "Collection variable should end with List / Collection / Items / Set",
+                            null);
+                    }
+                }
+            }
+        }
+    }
+
+    /* ===== PARAMETER ===== */
+    foreach (var parameter in root.DescendantNodes().OfType<ParameterSyntax>())
+    {
+        var symbol = model.GetDeclaredSymbol(parameter);
+        if (symbol == null) continue;
+
+        if (!IsCamelCase(symbol.Name))
+        {
+            Report(filePath, "Parameter Naming",
+                symbol.Name,
+                "Parameter must be camelCase",
+                ToCamelCase(symbol.Name));
+        }
+    }
+}
+
+/* ===============================
+   OUTPUT REPORT
+   =============================== */
+
+var report = new StringBuilder();
+report.AppendLine("C# Naming Convention Analysis Report");
+report.AppendLine($"Root Directory: {rootDir}");
+report.AppendLine(new string('-', 60));
+report.AppendLine();
+
+foreach (var fileEntry in errors)
+{
+    var displayFile = Path.GetRelativePath(rootDir, fileEntry.Key);
+    Console.WriteLine($"📄 {displayFile}");
+    report.AppendLine($"File: {displayFile}");
+
+    foreach (var type in fileEntry.Value)
+    {
+        Console.WriteLine($"  [{type.Key}]");
+        report.AppendLine($"  [{type.Key}]");
+
+        foreach (var err in type.Value)
+        {
+            Console.WriteLine($"    ❌ {err.Message}");
+            report.AppendLine($"    - {err.Message}");
+
+            if (err.Suggestion != null)
+            {
+                Console.WriteLine($"       💡 Suggested: {err.Suggestion}");
+                report.AppendLine($"       Suggested: {err.Suggestion}");
+            }
+        }
+        Console.WriteLine();
+        report.AppendLine();
+    }
+}
+
+if (errors.Count == 0)
+{
+    Console.WriteLine("✅ No naming convention issues found!");
+    report.AppendLine("No naming convention issues found!");
+}
+else
+{
+    File.WriteAllText(reportFilePath, report.ToString());
+}
+
+/* ===============================
+   HELPERS
+   =============================== */
+
+void Report(string file, string category, string name, string message, string? suggestion)
+{
+    if (!errors.ContainsKey(file))
+        errors[file] = new Dictionary<string, List<(string, string?)>>();
+
+    if (!errors[file].ContainsKey(category))
+        errors[file][category] = new List<(string, string?)>();
+
+    errors[file][category].Add(($"{name} → {message}", suggestion));
+}
+
+bool IsPascalCase(string s) =>
+    !string.IsNullOrEmpty(s) &&
+    char.IsUpper(s[0]) &&
+    !s.Contains("_");
+
+bool IsCamelCase(string s) =>
+    !string.IsNullOrEmpty(s) &&
+    char.IsLower(s[0]) &&
+    !s.Contains("_");
+
+bool IsAllCaps(string s) =>
+    s.All(c => !char.IsLetter(c) || char.IsUpper(c));
+
+string ToPascalCase(string input)
+{
+    var words = Regex.Split(input.Trim('_'), @"[_\W]+")
+        .Where(w => !string.IsNullOrEmpty(w))
+        .Select(w => char.ToUpper(w[0]) + w.Substring(1).ToLower());
+
+    return string.Concat(words);
+}
+
+string ToCamelCase(string input)
+{
+    if (string.IsNullOrWhiteSpace(input))
+        return input;
+
+    var p = ToPascalCase(input);
+
+    return string.IsNullOrEmpty(p)
+        ? p
+        : char.ToLower(p[0]) + p[1..];
+}
+
+string ToAllCaps(string input) =>
+    Regex.Replace(input, @"([a-z])([A-Z])", "$1_$2").ToUpper();

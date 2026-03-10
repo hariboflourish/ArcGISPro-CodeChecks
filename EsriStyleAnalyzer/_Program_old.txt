@@ -1,0 +1,290 @@
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
+
+class Program
+{
+    static void Main(string[] args)
+    {
+        bool verbose = args.Contains("--verbose");
+
+        var rootDir = Directory.GetCurrentDirectory();
+        var reportFileName = $"EsriStyle_Xaml_Report_{DateTime.Now:yyyyMM}.txt";
+        var reportFilePath = Path.Combine(rootDir, reportFileName);
+
+        Log.Info("Starting Esri Style XAML analysis");
+        Log.Info($"Root directory: {rootDir}");
+
+        var errors = new Dictionary<string, List<string>>();
+        var warnings = new Dictionary<string, List<string>>();
+
+        /* ===============================
+           STYLE RULE CONFIG
+           =============================== */
+
+	var styleRules = new Dictionary<string, string[]>
+	{
+	    // Buttons
+	    { "Button", new[]
+		{
+		    "Esri_Button",
+		    "Esri_ButtonBorderless",
+		    "Esri_ButtonClose",
+		    "Esri_ButtonBack",
+		    "Esri_ButtonBackSmall",
+		    "Esri_ButtonForwardSmall",
+		    "Esri_ButtonUpSmall",
+		    "Esri_ButtonDownSmall",
+		    "Esri_ButtonUpSmallBorderless",
+		    "Esri_ButtonForwardSmallBorderless"
+		}
+	    },
+
+	    // Toggle Buttons
+	    { "ToggleButton", new[]
+		{
+		    "Esri_ButtonToggle",
+		    "Esri_ToggleButtonTrayButton"
+		}
+	    },
+
+	    // CheckBox
+	    { "CheckBox", new[]
+		{
+		    "Esri_CheckBox",
+		    "Esri_CheckboxToggleSwitch",
+		    "Esri_CheckboxTrayButtonHeader"
+		}
+	    },
+
+	    // RadioButton
+	    { "RadioButton", new[]
+		{
+		    "Esri_RadioButton"
+		}
+	    },
+
+	    // ComboBox
+	    { "ComboBox", new[]
+		{
+		    "Esri_ComboBox"
+		}
+	    },
+
+	    // DataGrid
+	    { "DataGrid", new[]
+		{
+		    "Esri_DataGrid",
+		    "Esri_DataGridHeaderless",
+		    "Esri_DataGridRowHeaderless",
+		    "Esri_DataGridColumnHeader",
+		    "Esri_DataGridRowHeader",
+		    "Esri_DataGridRow",
+		    "Esri_DataGridCell"
+		}
+	    },
+
+	    // Expander
+	    { "Expander", new[]
+		{
+		    "Esri_Expander",
+		    "Esri_ExpanderBorderless",
+		    "Esri_ExpanderGripper",
+		    "Esri_ExpanderPlus",
+		    "Esri_ExpanderGripperPlus"
+		}
+	    },
+
+	    // Image
+	    { "Image", new[]
+		{
+		    "Esri_ImageTrayButton"
+		}
+	    },
+
+	    // TextBlock
+	    { "TextBlock", new[]
+		{
+		    "Esri_TextBlockRegular",
+		    "Esri_TextBlockH1",
+		    "Esri_TextBlockH2",
+		    "Esri_TextBlockH3",
+		    "Esri_TextBlockH4",
+		    "Esri_TextBlockH5",
+		    "Esri_TextBlockH6",
+		    "Esri_TextBlockH7",
+		    "Esri_TextBlockDockPaneHeading",
+		    "Esri_TextBlockDockPaneHeader",
+		    "Esri_TextBlockDialogHeader",
+		    "Esri_TextBlockDialog",
+		    "Esri_TextBlockBackStageTitle",
+		    "Esri_TextBlockBackStageHeader",
+		    "Esri_TextBlockBackStageSubHeader",
+		    "Esri_TextBlockBackStageGroupHeader"
+		}
+	    }
+	};
+
+        /* ===============================
+           FIND XAML FILES
+           =============================== */
+
+        var xamlFiles = Directory.GetFiles(rootDir, "*.xaml", SearchOption.AllDirectories)
+            .Where(f =>
+                !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}") &&
+                !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
+            .ToList();
+
+        Log.Info($"XAML files found: {xamlFiles.Count}");
+
+        /* ===============================
+           ANALYZE FILES
+           =============================== */
+
+        foreach (var file in xamlFiles)
+        {
+            var relativePath = Path.GetRelativePath(rootDir, file);
+            Log.Info($"Analyzing: {relativePath}");
+
+            var content = File.ReadAllText(file);
+
+            foreach (var rule in styleRules)
+            {
+                var control = rule.Key;
+                var expectedStyles = rule.Value;
+
+                var controlMatches = Regex.Matches(
+                    content,
+                    $@"<{control}(\s|>)",
+                    RegexOptions.IgnoreCase);
+
+                if (controlMatches.Count == 0)
+                    continue;
+
+                foreach (Match _ in controlMatches)
+                {
+                    bool hasEsriStyle = expectedStyles.Any(style =>
+                        HasStyle(content, control, style));
+
+                    if (hasEsriStyle)
+                        continue;
+
+                    if (!errors.ContainsKey(file))
+                        errors[file] = new List<string>();
+
+                    if (HasAnyStyle(content, control))
+                    {
+                        warnings.TryAdd(file, new List<string>());
+                        warnings[file].Add(
+                            $"{control}: Style detected but not Esri style (expected: {string.Join(", ", expectedStyles)})");
+
+                        Log.Warn($"{control} uses non-Esri style");
+                    }
+                    else
+                    {
+                        errors[file].Add(
+                            $"{control}: Missing Esri style (expected: {string.Join(", ", expectedStyles)})");
+
+                        Log.Error($"{control} missing Esri style");
+                    }
+                }
+            }
+        }
+
+        /* ===============================
+           REPORT OUTPUT
+           =============================== */
+
+        var report = new StringBuilder();
+        report.AppendLine("Esri Style XAML Analysis Report");
+        report.AppendLine($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        report.AppendLine($"Root Directory: {rootDir}");
+        report.AppendLine(new string('-', 60));
+        report.AppendLine();
+
+        foreach (var file in errors.Keys)
+        {
+            var displayFile = Path.GetRelativePath(rootDir, file);
+            report.AppendLine($"File: {displayFile}");
+
+            foreach (var msg in errors[file])
+                report.AppendLine($"  ERROR: {msg}");
+
+            if (warnings.ContainsKey(file))
+            {
+                foreach (var warn in warnings[file])
+                    report.AppendLine($"  WARNING: {warn}");
+            }
+
+            report.AppendLine();
+        }
+
+        File.WriteAllText(reportFilePath, report.ToString());
+
+        /* ===============================
+           SUMMARY
+           =============================== */
+
+        Log.Info($"Files with errors: {errors.Count}");
+        Log.Info($"Files with warnings: {warnings.Count}");
+        Log.Success($"Report generated: {reportFilePath}");
+    }
+
+    /* ===============================
+       STYLE HELPERS
+       =============================== */
+
+    static bool HasStyle(string xaml, string control, string styleKey)
+    {
+        return Regex.IsMatch(
+            xaml,
+            $@"<{control}[^>]*Style\s*=\s*""{{(Static|Dynamic)Resource\s+{styleKey}}}""",
+            RegexOptions.IgnoreCase);
+    }
+
+    static bool HasAnyStyle(string xaml, string control)
+    {
+        return Regex.IsMatch(
+            xaml,
+            $@"<{control}[^>]*Style\s*=",
+            RegexOptions.IgnoreCase);
+    }
+}
+
+/* ===============================
+   SIMPLE CONSOLE LOGGER
+   =============================== */
+
+static class Log
+{
+    public static void Info(string message)
+    {
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine($"[INFO] {message}");
+        Console.ResetColor();
+    }
+
+    public static void Warn(string message)
+    {
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine($"[WARN] {message}");
+        Console.ResetColor();
+    }
+
+    public static void Error(string message)
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine($"[ERROR] {message}");
+        Console.ResetColor();
+    }
+
+    public static void Success(string message)
+    {
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine($"[OK] {message}");
+        Console.ResetColor();
+    }
+}

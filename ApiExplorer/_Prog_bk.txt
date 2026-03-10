@@ -1,0 +1,126 @@
+﻿using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
+
+// ================================
+// ENTRY POINT
+// ================================
+
+var rootDir = Directory.GetCurrentDirectory();
+
+var csFiles = Directory.GetFiles(rootDir, "*.cs", SearchOption.AllDirectories)
+    .Where(f =>
+        !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}") &&
+        !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
+    .ToList();
+
+var workspace = new AdhocWorkspace();
+
+var projectInfo = ProjectInfo.Create(
+    ProjectId.CreateNewId(),
+    VersionStamp.Create(),
+    "ApiExplorer",
+    "ApiExplorer",
+    LanguageNames.CSharp,
+    compilationOptions: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+var project = workspace.AddProject(projectInfo);
+
+// 👇 add framework references (VERY important)
+project = project.AddMetadataReference(
+    MetadataReference.CreateFromFile(typeof(object).Assembly.Location));
+
+project = project.AddMetadataReference(
+    MetadataReference.CreateFromFile(typeof(Console).Assembly.Location));
+
+foreach (var file in csFiles)
+{
+    var text = SourceText.From(File.ReadAllText(file));
+    project = project.AddDocument(Path.GetFileName(file), text, filePath: file).Project;
+}
+
+var compilation = await project.GetCompilationAsync();
+if (compilation == null)
+{
+    WriteError("Failed to create compilation");
+    return;
+}
+
+foreach (var tree in compilation.SyntaxTrees)
+{
+    var model = compilation.GetSemanticModel(tree);
+    var root = await tree.GetRootAsync();
+
+    var types = root.DescendantNodes()
+        .OfType<TypeDeclarationSyntax>();
+
+    foreach (var typeDecl in types)
+    {
+        var symbol = model.GetDeclaredSymbol(typeDecl);
+        if (symbol == null) continue;
+
+        PrintType(symbol);
+    }
+}
+
+// ================================
+// HELPERS
+// ================================
+
+void PrintType(INamedTypeSymbol type)
+{
+    Console.WriteLine();
+
+    Console.ForegroundColor = ConsoleColor.Cyan;
+    Console.WriteLine($"📦 {type.TypeKind} {type.ToDisplayString()}");
+    Console.ResetColor();
+
+    foreach (var method in type.GetMembers()
+        .OfType<IMethodSymbol>()
+        .Where(m => m.MethodKind == MethodKind.Ordinary))
+    {
+        PrintMethod(method);
+    }
+}
+
+void PrintMethod(IMethodSymbol method)
+{
+    Console.ForegroundColor = ConsoleColor.Yellow;
+    Console.Write($"  ⚙️ {method.ReturnType.ToDisplayString()} ");
+    Console.ResetColor();
+
+    Console.ForegroundColor = ConsoleColor.Green;
+    Console.Write(method.Name);
+    Console.ResetColor();
+
+    Console.Write("(");
+
+    for (int i = 0; i < method.Parameters.Length; i++)
+    {
+        var p = method.Parameters[i];
+
+        Console.ForegroundColor = ConsoleColor.DarkCyan;
+        Console.Write(p.Type.ToDisplayString());
+        Console.ResetColor();
+
+        Console.Write(" ");
+
+        Console.ForegroundColor = ConsoleColor.Gray;
+        Console.Write(p.Name);
+        Console.ResetColor();
+
+        if (i < method.Parameters.Length - 1)
+            Console.Write(", ");
+    }
+
+    Console.WriteLine(")");
+}
+
+void WriteError(string message)
+{
+    Console.ForegroundColor = ConsoleColor.Red;
+    Console.WriteLine($"❌ {message}");
+    Console.ResetColor();
+}
+

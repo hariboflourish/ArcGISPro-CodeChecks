@@ -1,0 +1,64 @@
+C# Naming Convention Analysis Report
+Generated: 2569-01-31 22:19:53
+Root Directory: C:\Users\ADMIN\Documents\2025_PEA_UN_Migrate\GITLAB\faclp\Esrith.PEA.FACLP.Tools\Test
+------------------------------------------------------------
+
+File: badCode.cs
+  [Class Naming]
+    - layer_manager → Class name must be PascalCase
+       Suggested: LayerManager
+
+  [Method Naming]
+    - load_map_layers → Method name must be PascalCase
+       Suggested: LoadMapLayers
+    - export_to_shapefile → Method name must be PascalCase
+       Suggested: ExportToShapefile
+
+  [Property Naming]
+    - isbusy → Property name must be PascalCase
+       Suggested: Isbusy
+
+  [Constant Naming]
+    - maxLayerCount → Constant must be ALL_CAPS
+       Suggested: MAX_LAYER_COUNT
+
+File: badCode2.cs
+  [Class Naming]
+    - layer_manager → Class name must be PascalCase
+       Suggested: LayerManager
+
+  [Method Naming]
+    - load_map_layers → Method name must be PascalCase
+       Suggested: LoadMapLayers
+    - export_to_shapefile → Method name must be PascalCase
+       Suggested: ExportToShapefile
+
+  [Property Naming]
+    - isbusy → Property name must be PascalCase
+       Suggested: Isbusy
+
+  [Constant Naming]
+    - maxLayerCount → Constant must be ALL_CAPS
+       Suggested: MAX_LAYER_COUNT
+
+File: badCollection.cs
+  [Class Naming]
+    - layerService → Class name must be PascalCase
+       Suggested: Layerservice
+
+  [Method Naming]
+    - load_layers → Method name must be PascalCase
+       Suggested: LoadLayers
+
+  [Property Naming]
+    - visibleitems → Property name must be PascalCase
+       Suggested: Visibleitems
+
+  [Constant Naming]
+    - maxLayerCount → Constant must be ALL_CAPS
+       Suggested: MAX_LAYER_COUNT
+
+  [Field Naming]
+    - data → Field must be _camelCase
+       Suggested: _data
+

@@ -1,0 +1,69 @@
+C# Naming Convention Analysis Report
+Generated: 2569-01-31 17:06:45
+Root Directory: C:\Users\ADMIN\Documents\2025_PEA_UN_Migrate\GITLAB\faclp\Esrith.PEA.FACLP.Tools\Test
+------------------------------------------------------------
+
+File: badCode2.cs
+  [Class Naming]
+    - layer_manager → Class name must be PascalCase
+    - exportmap → Class name must be PascalCase
+    - elevationanalysis → Class name must be PascalCase
+
+  [Method Naming]
+    - load_map_layers → Method name must be PascalCase
+    - export_to_shapefile → Method name must be PascalCase
+
+  [Property Naming]
+    - isbusy → Property name must be PascalCase
+
+  [Field Naming]
+    - mapPath → Field must be prefixed with '_' and use camelCase
+
+  [Constant Naming]
+    - maxLayerCount → Global constant must be ALL_CAPS
+
+File: badCode.cs
+  [Class Naming]
+    - layer_manager → Class name must be PascalCase
+    - exportmap → Class name must be PascalCase
+    - elevationanalysis → Class name must be PascalCase
+
+  [Method Naming]
+    - load_map_layers → Method name must be PascalCase
+    - export_to_shapefile → Method name must be PascalCase
+
+  [Property Naming]
+    - isbusy → Property name must be PascalCase
+
+  [Field Naming]
+    - mapPath → Field must be prefixed with '_' and use camelCase
+
+  [Constant Naming]
+    - maxLayerCount → Global constant must be ALL_CAPS
+
+File: badCollection.cs
+  [Class Naming]
+    - layerService → Class name must be PascalCase
+    - exportmapcommand → Class name must be PascalCase
+    - elevationanalysisdockpane → Class name must be PascalCase
+
+  [Method Naming]
+    - load_layers → Method name must be PascalCase
+
+  [Property Naming]
+    - visibleitems → Property name must be PascalCase
+
+  [Field Naming]
+    - layer → Field must be prefixed with '_' and use camelCase
+    - selected → Field must be prefixed with '_' and use camelCase
+    - data → Field must be prefixed with '_' and use camelCase
+
+  [Collection Naming]
+    - layer → Collection name must end with List, Items, Set, or Collection
+    - selected → Collection name must end with List, Items, Set, or Collection
+    - data → Collection name must end with List, Items, Set, or Collection
+
+  [Constant Naming]
+    - maxLayerCount → Global constant must be ALL_CAPS
+
+Total violations: 28

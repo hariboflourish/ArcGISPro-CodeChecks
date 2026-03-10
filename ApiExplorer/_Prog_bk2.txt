@@ -1,0 +1,170 @@
+﻿using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
+
+// ================================
+// ENTRY POINT
+// ================================
+
+var rootDir = Directory.GetCurrentDirectory();
+
+var csFiles = Directory.GetFiles(rootDir, "*.cs", SearchOption.AllDirectories)
+    .Where(f =>
+        !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}") &&
+        !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
+    .ToList();
+
+var workspace = new AdhocWorkspace();
+
+var projectInfo = ProjectInfo.Create(
+    ProjectId.CreateNewId(),
+    VersionStamp.Create(),
+    "ApiExplorer",
+    "ApiExplorer",
+    LanguageNames.CSharp,
+    compilationOptions: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+var project = workspace.AddProject(projectInfo);
+
+// 👇 add framework references (VERY important)
+project = project.AddMetadataReference(
+    MetadataReference.CreateFromFile(typeof(object).Assembly.Location));
+
+project = project.AddMetadataReference(
+    MetadataReference.CreateFromFile(typeof(Console).Assembly.Location));
+
+foreach (var file in csFiles)
+{
+    var text = SourceText.From(File.ReadAllText(file));
+    project = project.AddDocument(Path.GetFileName(file), text, filePath: file).Project;
+}
+
+var compilation = await project.GetCompilationAsync();
+if (compilation == null)
+{
+    WriteError("Failed to create compilation");
+    return;
+}
+
+var typesByNamespace = new Dictionary<string, List<INamedTypeSymbol>>();
+
+foreach (var tree in compilation.SyntaxTrees)
+{
+    var model = compilation.GetSemanticModel(tree);
+    var root = await tree.GetRootAsync();
+
+    var typeDecls = root.DescendantNodes()
+        .OfType<TypeDeclarationSyntax>();
+
+    foreach (var decl in typeDecls)
+    {
+        var symbol = model.GetDeclaredSymbol(decl);
+        if (symbol == null) continue;
+
+        var ns = symbol.ContainingNamespace?.ToDisplayString() ?? "<global>";
+
+        if (!typesByNamespace.TryGetValue(ns, out var list))
+        {
+            list = new List<INamedTypeSymbol>();
+            typesByNamespace[ns] = list;
+        }
+
+        list.Add(symbol);
+    }
+}
+
+foreach (var ns in typesByNamespace.OrderBy(n => n.Key))
+{
+    PrintNamespace(ns.Key);
+
+    foreach (var type in ns.Value.OrderBy(t => t.Name))
+    {
+        PrintType(type);
+    }
+}
+
+
+// ================================
+// HELPERS
+// ================================
+
+void WriteError(string message)
+{
+    Console.ForegroundColor = ConsoleColor.Red;
+    Console.WriteLine($"❌ {message}");
+    Console.ResetColor();
+}
+
+void PrintNamespace(string name)
+{
+    Console.ForegroundColor = ConsoleColor.Magenta;
+    Console.WriteLine($"\n📂 namespace {name}");
+    Console.ResetColor();
+}
+
+void PrintType(INamedTypeSymbol type)
+{
+    Console.ForegroundColor = ConsoleColor.Cyan;
+    Console.WriteLine($"\n  📦 {type.TypeKind} {type.Name}");
+    Console.ResetColor();
+
+    PrintFields(type);
+    PrintProperties(type);
+    PrintMethods(type);
+}
+
+void PrintFields(INamedTypeSymbol type)
+{
+    foreach (var field in type.GetMembers().OfType<IFieldSymbol>())
+    {
+        Console.ForegroundColor = ConsoleColor.DarkYellow;
+        Console.Write("    🧱 field ");
+        Console.ResetColor();
+
+        Console.WriteLine($"{field.Type.ToDisplayString()} {field.Name}");
+    }
+}
+
+void PrintProperties(INamedTypeSymbol type)
+{
+    foreach (var prop in type.GetMembers().OfType<IPropertySymbol>())
+    {
+        Console.ForegroundColor = ConsoleColor.Blue;
+        Console.Write("    🔑 property ");
+        Console.ResetColor();
+
+        Console.WriteLine($"{prop.Type.ToDisplayString()} {prop.Name}");
+    }
+}
+
+void PrintMethods(INamedTypeSymbol type)
+{
+    foreach (var method in type.GetMembers()
+        .OfType<IMethodSymbol>()
+        .Where(m => m.MethodKind == MethodKind.Ordinary))
+    {
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.Write("    ⚙️ ");
+        Console.ResetColor();
+
+        Console.Write($"{method.ReturnType.ToDisplayString()} ");
+
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.Write(method.Name);
+        Console.ResetColor();
+
+        Console.Write("(");
+
+        for (int i = 0; i < method.Parameters.Length; i++)
+        {
+            var p = method.Parameters[i];
+            Console.Write($"{p.Type.ToDisplayString()} {p.Name}");
+            if (i < method.Parameters.Length - 1)
+                Console.Write(", ");
+        }
+
+        Console.WriteLine(")");
+    }
+}
+
