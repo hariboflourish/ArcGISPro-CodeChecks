@@ -294,6 +294,18 @@ foreach (var document in mainProject.Documents)
             }
         }
     }
+    // ===== VAR TYPE CHECK =====
+    foreach (var variableDeclaration in root.DescendantNodes().OfType<VariableDeclaratorSyntax>())
+    {
+        if (variableDeclaration.Parent is VariableDeclarationSyntax varDeclaration &&
+            varDeclaration.Type.ToString() == "var")
+        {
+            Report(filePath, "Var Type Usage",
+                variableDeclaration.Identifier.Text,
+                "'var' usage detected. Consider specifying explicit type.",
+                null);
+        }
+    }
 }
 
 /* ===============================
