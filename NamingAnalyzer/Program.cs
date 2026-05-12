@@ -149,21 +149,41 @@ foreach (var document in mainProject.Documents)
     }
 
     /* ===== PROPERTY ===== */
+
+    //Ter Special Case : Public property should be PascalCase, private property should be _camelCase
     foreach (var prop in root.DescendantNodes().OfType<PropertyDeclarationSyntax>())
     {
         var symbol = model.GetDeclaredSymbol(prop);
         if (symbol == null || symbol.IsOverride) continue;
 
-        if (!IsPascalCase(symbol.Name))
+        if (prop.Modifiers.Where(m => m.Text == "public").ToList().Count() == 0)
         {
-            var suggestion = ToPascalCase(symbol.Name);
-
-            Report(filePath, "Property Naming",
-                symbol.Name, "Property must be PascalCase", suggestion);
-
-            AddCsv(displayFile, "Property Naming", symbol.Name, suggestion, prop);
+            if (!symbol.Name.StartsWith("_") || !IsCamelCase(symbol.Name.TrimStart('_')))
+                return (symbol, "_" + ToCamelCase(symbol.Name), "Private Property Naming");
+        }
+        else
+        {
+            if (!IsPascalCase(symbol.Name))
+                return (symbol, ToPascalCase(symbol.Name), "Public Property Naming");
         }
     }
+
+
+    //foreach (var prop in root.DescendantNodes().OfType<PropertyDeclarationSyntax>())
+    //{
+    //    var symbol = model.GetDeclaredSymbol(prop);
+    //    if (symbol == null || symbol.IsOverride) continue;
+
+    //    if (!IsPascalCase(symbol.Name))
+    //    {
+    //        var suggestion = ToPascalCase(symbol.Name);
+
+    //        Report(filePath, "Property Naming",
+    //            symbol.Name, "Property must be PascalCase", suggestion);
+
+    //        AddCsv(displayFile, "Property Naming", symbol.Name, suggestion, prop);
+    //    }
+    //}
 
     /* ===== FIELD ===== */
     foreach (var field in root.DescendantNodes().OfType<FieldDeclarationSyntax>())
